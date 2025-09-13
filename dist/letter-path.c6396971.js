@@ -690,14 +690,16 @@ new (0, _p5Default.default)((sk)=>{
     let previousActiveX = 0;
     let previousActiveY = 0;
     // Gesture timing
-    let chestTouchStartTime = 0;
-    let chestTouchingHand = null;
     let earTouchStartTime = 0;
     let prayerStartTime = 0;
     let lastLetterEraseTime = 0;
-    let isChestTouching = false;
     let isEarTouching = false;
     let isPraying = false;
+    // Crossing detection
+    let leftHandBelowChest = false;
+    let rightHandBelowChest = false;
+    let leftCrossCount = 0;
+    let rightCrossCount = 0;
     sk.preload = ()=>{
         type = sk.loadFont((0, _leagueGothicRegularTtfDefault.default));
     };
@@ -732,33 +734,48 @@ new (0, _p5Default.default)((sk)=>{
         const heartCenterX = (LM.X11 + LM.X12) / 2;
         const heartCenterY = (LM.Y11 + LM.Y12) / 2 + 40;
         // Distances for gesture detection
-        const leftHandToHeart = sk.dist(LM.X21, LM.Y21, heartCenterX, heartCenterY);
-        const rightHandToHeart = sk.dist(LM.X22, LM.Y22, heartCenterX, heartCenterY);
         const leftHandToEar = sk.dist(LM.X21, LM.Y21, LM.X7, LM.Y7);
         const rightHandToEar = sk.dist(LM.X22, LM.Y22, LM.X8, LM.Y8);
         const handsTogether = sk.dist(LM.X21, LM.Y21, LM.X22, LM.Y22);
-        // Chest touch activation
-        const currentChestTouching = leftHandToHeart < 80 || rightHandToHeart < 80;
-        if (currentChestTouching && !isChestTouching) {
-            chestTouchStartTime = sk.millis();
-            chestTouchingHand = leftHandToHeart < 80 ? "left" : "right";
-            isChestTouching = true;
-        } else if (!currentChestTouching) isChestTouching = false;
-        // Activate drawing after 1 second chest touch
-        if (isChestTouching && sk.millis() - chestTouchStartTime > 1000) {
-            drawingHand = chestTouchingHand;
-            isDrawingEnabled = true;
+        // Crossing gesture detection for activation/deactivation
+        const leftHandNearChestX = Math.abs(LM.X21 - heartCenterX) < 80;
+        const rightHandNearChestX = Math.abs(LM.X22 - heartCenterX) < 80;
+        // Left hand crossing (activates/deactivates right hand)
+        if (leftHandNearChestX) {
+            if (LM.Y21 > heartCenterY + 50 && !leftHandBelowChest) leftHandBelowChest = true;
+            else if (LM.Y21 < heartCenterY - 50 && leftHandBelowChest) {
+                leftCrossCount++;
+                leftHandBelowChest = false;
+                // Can always activate right hand, but only deactivate if no hand is drawing or if right hand is currently drawing
+                if (leftCrossCount % 2 === 1) {
+                    drawingHand = "right";
+                    isDrawingEnabled = true;
+                } else if (!isDrawingEnabled || drawingHand === "right") {
+                    drawingHand = null;
+                    isDrawingEnabled = false;
+                    accumulatedDistance = 0;
+                    previousActiveX = 0;
+                    previousActiveY = 0;
+                }
+            }
         }
-        // Deactivate drawing when non-drawing hand is raised above shoulder
-        if (isDrawingEnabled) {
-            const nonDrawingHandY = drawingHand === "left" ? LM.Y22 : LM.Y21;
-            const shoulderY = (LM.Y11 + LM.Y12) / 2;
-            if (nonDrawingHandY < shoulderY - 50) {
-                isDrawingEnabled = false;
-                drawingHand = null;
-                accumulatedDistance = 0;
-                previousActiveX = 0;
-                previousActiveY = 0;
+        // Right hand crossing (activates/deactivates left hand)
+        if (rightHandNearChestX) {
+            if (LM.Y22 > heartCenterY + 50 && !rightHandBelowChest) rightHandBelowChest = true;
+            else if (LM.Y22 < heartCenterY - 50 && rightHandBelowChest) {
+                rightCrossCount++;
+                rightHandBelowChest = false;
+                // Can always activate left hand, but only deactivate if no hand is drawing or if left hand is currently drawing
+                if (rightCrossCount % 2 === 1) {
+                    drawingHand = "left";
+                    isDrawingEnabled = true;
+                } else if (!isDrawingEnabled || drawingHand === "left") {
+                    drawingHand = null;
+                    isDrawingEnabled = false;
+                    accumulatedDistance = 0;
+                    previousActiveX = 0;
+                    previousActiveY = 0;
+                }
             }
         }
         // Erase all - both hands to ears for 2 seconds
@@ -826,20 +843,47 @@ new (0, _p5Default.default)((sk)=>{
             sk.text(letter.char, letter.x, letter.y);
         }
         sk.pop();
+        // Activation status text
+        sk.push();
+        sk.fill(255);
+        sk.textSize(24);
+        sk.textAlign(sk.RIGHT, sk.BOTTOM);
+        sk.textFont("monospace");
+        let statusText = "";
+        if (isDrawingEnabled && drawingHand === "left") statusText = "LEFT HAND ACTIVATED";
+        else if (isDrawingEnabled && drawingHand === "right") statusText = "RIGHT HAND ACTIVATED";
+        else statusText = "NO HAND ACTIVATED";
+        sk.text(statusText, sk.width - 20, sk.height - 20);
+        sk.pop();
         // Debug circles
         sk.push();
-        sk.noFill();
         sk.strokeWeight(2);
-        // Hands
-        sk.stroke(isDrawingEnabled && drawingHand === "left" ? "#00ff00" : "#ffff00");
-        sk.ellipse(LM.X21, LM.Y21, 20, 20);
-        sk.stroke(isDrawingEnabled && drawingHand === "right" ? "#00ff00" : "#ffff00");
-        sk.ellipse(LM.X22, LM.Y22, 20, 20);
+        // Hands - filled green if active drawing hand, yellow outline if not
+        if (isDrawingEnabled && drawingHand === "left") {
+            sk.fill("#00ff00");
+            sk.stroke("#00ff00");
+            sk.ellipse(LM.X21, LM.Y21, 24, 24);
+        } else {
+            sk.noFill();
+            sk.stroke("#ffff00");
+            sk.ellipse(LM.X21, LM.Y21, 20, 20);
+        }
+        if (isDrawingEnabled && drawingHand === "right") {
+            sk.fill("#00ff00");
+            sk.stroke("#00ff00");
+            sk.ellipse(LM.X22, LM.Y22, 24, 24);
+        } else {
+            sk.noFill();
+            sk.stroke("#ffff00");
+            sk.ellipse(LM.X22, LM.Y22, 20, 20);
+        }
         // Ears
+        sk.noFill();
         sk.stroke("#ff0000");
         sk.ellipse(LM.X7, LM.Y7, 16, 16);
         sk.ellipse(LM.X8, LM.Y8, 16, 16);
         // Heart center
+        sk.noFill();
         sk.stroke("#0000ff");
         sk.ellipse(heartCenterX, heartCenterY, 24, 24);
         sk.pop();

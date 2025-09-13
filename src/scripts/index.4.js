@@ -212,23 +212,6 @@ new p5((sk) => {
     }
     sk.pop();
 
-    // Activation status text
-    sk.push();
-    sk.fill(255);
-    sk.textSize(24);
-    sk.textAlign(sk.RIGHT, sk.BOTTOM);
-    sk.textFont("monospace");
-    let statusText = "";
-    if (isDrawingEnabled && drawingHand === "left") {
-      statusText = "LEFT HAND ACTIVATED";
-    } else if (isDrawingEnabled && drawingHand === "right") {
-      statusText = "RIGHT HAND ACTIVATED";
-    } else {
-      statusText = "NO HAND ACTIVATED";
-    }
-    sk.text(statusText, sk.width - 20, sk.height - 20);
-    sk.pop();
-
     // Debug circles
     sk.push();
     sk.strokeWeight(2);
